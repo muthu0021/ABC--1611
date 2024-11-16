@@ -8,21 +8,44 @@ pipeline {
     }
 
     stages {
-        stage('Build') {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', url: 'https://github.com/muthu0021/ABC--1611'
+            }
+        }
+        stage('Build Project') {
             steps {
                 script {
-                    sh "${MAVEN_HOME}/bin/mvn clean package"
+                    def projects = ['my-webapp']
+                    projects.each { project ->
+                        stage("Build ${project}") {
+                            dir(project) {
+                                sh "${MAVEN_HOME}/bin/mvn clean install"
+                                sh "ls target"  // List the contents of the target directory
+                            }
+                        }
+                    }
                 }
             }
         }
         stage('Push Artifact') {
             steps {
                 script {
-                    sh """
-                    ${MAVEN_HOME}/bin/mvn deploy \
-                    -DaltDeploymentRepository=${SERVER_ID}::default::https://pkgs.dev.azure.com/adikarthikgupta/_packaging/adikarthikgupta/maven/v1 \
-                    -DrepositoryId=${SERVER_ID}
-                    """
+                    echo "Deploying the WAR file to the repository..."
+                    withCredentials([usernamePassword(credentialsId: CREDENTIALS_ID, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                        sh """
+                        export MAVEN_OPTS="-Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true"
+                        ${MAVEN_HOME}/bin/mvn deploy:deploy-file \
+                        -DgroupId=com.mycompany.app \
+                        -DartifactId=my-webapp \
+                        -Dversion=1.0-SNAPSHOT \
+                        -Dpackaging=war \
+                        -Dfile=/var/lib/jenkins/workspace/tomcat/my-webapp/target/my-webapp.war \
+                        -DrepositoryId=${SERVER_ID} \
+                        -Durl=https://pkgs.dev.azure.com/adikarthikgupta/_packaging/adikarthikgupta/maven/v1 \
+                        --settings /home/docker/.m2/settings.xml
+                        """
+                    }
                 }
             }
         }
@@ -30,7 +53,7 @@ pipeline {
             steps {
                 script {
                     sh """
-                    cp target/*.war /path/to/tomcat/webapps/
+                    cp /var/lib/jenkins/workspace/tomcat/my-webapp/target/my-webapp.war /path/to/tomcat/webapps/
                     sudo systemctl restart tomcat
                     """
                 }
@@ -47,4 +70,3 @@ pipeline {
         }
     }
 }
-
