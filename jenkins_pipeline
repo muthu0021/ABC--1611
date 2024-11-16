@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+
+    environment {
+        MAVEN_HOME = tool name: 'Maven', type: 'maven'
+        CREDENTIALS_ID = 'adikarthikgupta'
+        SERVER_ID = 'adikarthikgupta'
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                script {
+                    sh "${MAVEN_HOME}/bin/mvn clean package"
+                }
+            }
+        }
+        stage('Push Artifact') {
+            steps {
+                script {
+                    sh """
+                    ${MAVEN_HOME}/bin/mvn deploy \
+                    -DaltDeploymentRepository=${SERVER_ID}::default::https://pkgs.dev.azure.com/adikarthikgupta/_packaging/adikarthikgupta/maven/v1 \
+                    -DrepositoryId=${SERVER_ID}
+                    """
+                }
+            }
+        }
+        stage('Deploy to Tomcat') {
+            steps {
+                script {
+                    sh """
+                    cp target/*.war /path/to/tomcat/webapps/
+                    sudo systemctl restart tomcat
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully.'
+        }
+        failure {
+            echo 'Pipeline failed.'
+        }
+    }
+}
+
